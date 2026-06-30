@@ -1,0 +1,17 @@
+{
+  "name": "LabTest — Voice-labeled lab racks",
+  "short_name": "LabTest",
+  "description": "Label and query test-tube rack contents by voice.",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#3b82f6",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

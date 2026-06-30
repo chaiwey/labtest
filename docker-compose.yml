@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: labtest-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: labtest
+      POSTGRES_PASSWORD: labtest
+      POSTGRES_DB: labtest
+    ports:
+      - "5433:5432"
+    volumes:
+      - labtest_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U labtest -d labtest"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  labtest_pgdata:
