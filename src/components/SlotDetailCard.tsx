@@ -1,11 +1,17 @@
 "use client";
 
 import { useState } from "react";
+import {
+  FIELD_TYPES,
+  FIELD_TYPE_LABELS,
+  inputTypeFor,
+  type FieldType,
+} from "@/lib/fields";
 
 export interface FieldDef {
   id: string;
   name: string;
-  type: "text" | "number" | "date" | "enum";
+  type: FieldType;
   options?: string[];
 }
 
@@ -17,7 +23,8 @@ interface Props {
   valueFor: (fieldId: string) => string; // bound to the active cell
   onSaveLabel: (value: string) => void;
   onSaveField: (fieldId: string, value: string | null) => void;
-  onAddField: (name: string) => void;
+  onAddField: (name: string, type: FieldType) => void;
+  onDeleteField: (fieldId: string, name: string) => void;
   onClose: () => void;
   onFocusChange: (focused: boolean) => void;
 }
@@ -31,19 +38,22 @@ export function SlotDetailCard({
   onSaveLabel,
   onSaveField,
   onAddField,
+  onDeleteField,
   onClose,
   onFocusChange,
 }: Props) {
   const [adding, setAdding] = useState(false);
   const [newField, setNewField] = useState("");
+  const [newType, setNewType] = useState<FieldType>("text");
 
   const hasContent = Boolean(label) || fields.some((f) => valueFor(f.id));
 
   function addField() {
     const name = newField.trim();
     if (!name) return;
-    onAddField(name);
+    onAddField(name, newType);
     setNewField("");
+    setNewType("text");
     setAdding(false);
   }
 
@@ -96,10 +106,24 @@ export function SlotDetailCard({
               </Field>
 
               {fields.map((f) => (
-                <Field key={f.id} label={f.name}>
+                <Field
+                  key={f.id}
+                  label={f.name}
+                  action={
+                    editable ? (
+                      <button
+                        onClick={() => onDeleteField(f.id, f.name)}
+                        title={`Delete field “${f.name}”`}
+                        className="rounded px-1 text-xs text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                      >
+                        Remove
+                      </button>
+                    ) : undefined
+                  }
+                >
                   {editable ? (
                     <input
-                      type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+                      type={inputTypeFor(f.type)}
                       list={f.type === "enum" ? `opts-${f.id}` : undefined}
                       defaultValue={valueFor(f.id)}
                       onFocus={() => onFocusChange(true)}
@@ -127,7 +151,7 @@ export function SlotDetailCard({
             {editable && (
               <>
                 {adding ? (
-                  <div className="mt-4 flex gap-2">
+                  <div className="mt-4 space-y-2">
                     <input
                       autoFocus
                       value={newField}
@@ -137,14 +161,27 @@ export function SlotDetailCard({
                         if (e.key === "Escape") setAdding(false);
                       }}
                       placeholder="New field name…"
-                      className="flex-1 rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20"
+                      className="w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20"
                     />
-                    <button
-                      onClick={addField}
-                      className="brand-gradient rounded-lg px-3 py-1.5 text-sm font-medium text-white"
-                    >
-                      Add
-                    </button>
+                    <div className="flex gap-2">
+                      <select
+                        value={newType}
+                        onChange={(e) => setNewType(e.target.value as FieldType)}
+                        className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20"
+                      >
+                        {FIELD_TYPES.map((t) => (
+                          <option key={t} value={t}>
+                            {FIELD_TYPE_LABELS[t]}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={addField}
+                        className="brand-gradient rounded-lg px-3 py-1.5 text-sm font-medium text-white"
+                      >
+                        Add
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <button
@@ -177,11 +214,20 @@ export function SlotDetailCard({
 const inputCls =
   "mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  action,
+  children,
+}: {
+  label: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">
-        {label}
+      <dt className="flex items-center justify-between text-xs font-medium uppercase tracking-wide text-slate-400">
+        <span>{label}</span>
+        {action}
       </dt>
       <dd>{children}</dd>
     </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, memo, useCallback } from "react";
 import { colToLetter, toPosition, type Cell } from "@/lib/grid";
 
 interface Props {
@@ -31,6 +31,58 @@ function sizing(rows: number, cols: number) {
   };
 }
 
+// Memoized so a hover only re-renders the two cells whose state changed, not the
+// whole grid (which caused flicker/jank on large racks).
+const SlotCircle = memo(function SlotCircle({
+  row,
+  col,
+  size,
+  filled,
+  ariaLabel,
+  state,
+  onHover,
+  onSelect,
+}: {
+  row: number;
+  col: number;
+  size: number;
+  filled: boolean;
+  ariaLabel: string;
+  state: "selected" | "hovered" | "voice" | "none";
+  onHover: (row: number, col: number) => void;
+  onSelect: (row: number, col: number) => void;
+}) {
+  const ring =
+    state === "selected"
+      ? "ring-2 ring-accent-blue"
+      : state === "hovered"
+        ? "ring-2 ring-accent-purple/70"
+        : state === "voice"
+          ? "ring-2 ring-accent-green"
+          : "";
+  return (
+    <button
+      aria-label={ariaLabel}
+      onMouseEnter={() => onHover(row, col)}
+      onClick={() => onSelect(row, col)}
+      className={[
+        "rounded-full border transition",
+        filled
+          ? "border-transparent"
+          : "border-slate-200 bg-slate-50 hover:border-accent-blue/50",
+        ring,
+      ].join(" ")}
+      style={{
+        width: size,
+        height: size,
+        backgroundImage: filled
+          ? "linear-gradient(135deg,#10b981,#3b82f6,#8b5cf6)"
+          : undefined,
+      }}
+    />
+  );
+});
+
 export function RackGrid({
   rows,
   cols,
@@ -43,6 +95,16 @@ export function RackGrid({
   onSelect,
 }: Props) {
   const { cell, gap, rowHeaderW, headerFont } = sizing(rows, cols);
+
+  // Stable per-cell handlers so memoized cells don't re-render every hover.
+  const handleHover = useCallback(
+    (row: number, col: number) => onHover({ row, col }),
+    [onHover],
+  );
+  const handleSelect = useCallback(
+    (row: number, col: number) => onSelect({ row, col }),
+    [onSelect],
+  );
 
   return (
     <div
@@ -57,7 +119,6 @@ export function RackGrid({
           width: "max-content",
         }}
       >
-        {/* corner + column headers */}
         <div />
         {Array.from({ length: cols }).map((_, c) => (
           <div
@@ -78,39 +139,25 @@ export function RackGrid({
               {r + 1}
             </div>
             {Array.from({ length: cols }).map((_, c) => {
-              const filled = isFilled(r, c);
               const sum = summary?.(r, c);
-              const isSel = same(selected, r, c);
-              const isHov = same(hovered, r, c);
-              const isVoice = same(voiceHighlight, r, c);
+              const state = same(selected, r, c)
+                ? "selected"
+                : same(hovered, r, c)
+                  ? "hovered"
+                  : same(voiceHighlight, r, c)
+                    ? "voice"
+                    : "none";
               return (
-                <button
+                <SlotCircle
                   key={`c${r}-${c}`}
-                  aria-label={`Slot ${toPosition({ row: r, col: c })}${
-                    sum ? `, ${sum}` : ", empty"
-                  }`}
-                  onMouseEnter={() => onHover({ row: r, col: c })}
-                  onClick={() => onSelect({ row: r, col: c })}
-                  className={[
-                    "rounded-full border transition",
-                    filled
-                      ? "border-transparent"
-                      : "border-slate-200 bg-slate-50 hover:border-accent-blue/50",
-                    isSel
-                      ? "ring-2 ring-accent-blue"
-                      : isHov
-                        ? "ring-2 ring-accent-purple/70"
-                        : isVoice
-                          ? "ring-2 ring-accent-green"
-                          : "",
-                  ].join(" ")}
-                  style={{
-                    width: cell,
-                    height: cell,
-                    backgroundImage: filled
-                      ? "linear-gradient(135deg,#10b981,#3b82f6,#8b5cf6)"
-                      : undefined,
-                  }}
+                  row={r}
+                  col={c}
+                  size={cell}
+                  filled={isFilled(r, c)}
+                  ariaLabel={`Slot ${toPosition({ row: r, col: c })}${sum ? `, ${sum}` : ", empty"}`}
+                  state={state}
+                  onHover={handleHover}
+                  onSelect={handleSelect}
                 />
               );
             })}

@@ -109,6 +109,7 @@ enum FieldType {
   text
   number
   date
+  percent
   enum
 }
 

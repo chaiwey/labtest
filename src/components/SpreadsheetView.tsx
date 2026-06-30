@@ -3,6 +3,12 @@
 import { useState } from "react";
 import { allCells, toPosition } from "@/lib/grid";
 import type { FieldDef } from "./SlotDetailCard";
+import {
+  FIELD_TYPES,
+  FIELD_TYPE_LABELS,
+  inputTypeFor,
+  type FieldType,
+} from "@/lib/fields";
 
 interface Props {
   rows: number;
@@ -13,7 +19,8 @@ interface Props {
   isFilled: (row: number, col: number) => boolean;
   onSaveLabel: (row: number, col: number, value: string) => void;
   onSaveField: (row: number, col: number, fieldId: string, value: string | null) => void;
-  onAddField: (name: string) => void;
+  onAddField: (name: string, type: FieldType) => void;
+  onDeleteField: (fieldId: string, name: string) => void;
   onSaveAsDefault: () => void;
 }
 
@@ -27,10 +34,12 @@ export function SpreadsheetView({
   onSaveLabel,
   onSaveField,
   onAddField,
+  onDeleteField,
   onSaveAsDefault,
 }: Props) {
   const [onlyFilled, setOnlyFilled] = useState(false);
   const [newCol, setNewCol] = useState("");
+  const [newType, setNewType] = useState<FieldType>("text");
 
   const cells = allCells({ rows, cols }).filter(
     (c) => !onlyFilled || isFilled(c.row, c.col),
@@ -39,8 +48,9 @@ export function SpreadsheetView({
   function addColumn() {
     const name = newCol.trim();
     if (!name) return;
-    onAddField(name);
+    onAddField(name, newType);
     setNewCol("");
+    setNewType("text");
   }
 
   const inputCls =
@@ -57,6 +67,17 @@ export function SpreadsheetView({
             placeholder="New column name…"
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20"
           />
+          <select
+            value={newType}
+            onChange={(e) => setNewType(e.target.value as FieldType)}
+            className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-accent-blue focus:ring-2 focus:ring-accent-blue/20"
+          >
+            {FIELD_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {FIELD_TYPE_LABELS[t]}
+              </option>
+            ))}
+          </select>
           <button
             onClick={addColumn}
             className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 transition hover:bg-slate-50"
@@ -90,7 +111,16 @@ export function SpreadsheetView({
               <th className="px-4 py-2 font-medium">Label</th>
               {fields.map((f) => (
                 <th key={f.id} className="px-4 py-2 font-medium">
-                  {f.name}
+                  <span className="inline-flex items-center gap-1">
+                    {f.name}
+                    <button
+                      onClick={() => onDeleteField(f.id, f.name)}
+                      title={`Delete column “${f.name}”`}
+                      className="rounded px-1 text-slate-300 transition hover:bg-red-50 hover:text-red-500"
+                    >
+                      ×
+                    </button>
+                  </span>
                 </th>
               ))}
             </tr>
@@ -121,7 +151,7 @@ export function SpreadsheetView({
                       <td key={f.id} className="px-2 py-1">
                         <input
                           key={`${f.id}-${v}`}
-                          type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
+                          type={inputTypeFor(f.type)}
                           defaultValue={v}
                           onBlur={(e) => {
                             if (e.target.value !== v)

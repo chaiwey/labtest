@@ -2,7 +2,7 @@ import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, protectedProcedure } from "../trpc";
 
-const fieldType = z.enum(["text", "number", "date", "enum"]);
+const fieldType = z.enum(["text", "number", "date", "percent", "enum"]);
 
 export const userSettingsRouter = router({
   // Account + voice settings for the signed-in user.

@@ -4,7 +4,7 @@ import { router, protectedProcedure } from "../trpc";
 import type { Context } from "../trpc";
 import { inBounds } from "@/lib/grid";
 
-const fieldType = z.enum(["text", "number", "date", "enum"]);
+const fieldType = z.enum(["text", "number", "date", "percent", "enum"]);
 
 /** Verify a project belongs to the signed-in user. */
 async function assertOwnedProject(

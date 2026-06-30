@@ -15,7 +15,8 @@ editable spreadsheet.
     racks). Hover a slot to preview it in a side card; click to edit.
   - **Spreadsheet** — an editable table with a column per field.
 - **Custom field schema** — beyond the primary label, define per-project fields
-  (text / number / date / enum). Add columns/fields from **either** view; they
+  (text / number / date / percent / enum). Add columns/fields from **either**
+  view; they
   stay in sync. Fields are seeded from a per-user default template and can be
   pushed back up with **"Save as my default fields."** Removing a field
   soft-deletes (archives) its values.

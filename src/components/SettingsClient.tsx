@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { trpc } from "@/lib/trpc-client";
 
-type FieldType = "text" | "number" | "date" | "enum";
-const TYPES: FieldType[] = ["text", "number", "date", "enum"];
+import { FIELD_TYPES, FIELD_TYPE_LABELS, type FieldType } from "@/lib/fields";
+const TYPES = FIELD_TYPES;
 
 export function SettingsClient() {
   const utils = trpc.useUtils();
@@ -199,7 +199,7 @@ function TypeSelect({
     >
       {TYPES.map((t) => (
         <option key={t} value={t}>
-          {t}
+          {FIELD_TYPE_LABELS[t]}
         </option>
       ))}
     </select>

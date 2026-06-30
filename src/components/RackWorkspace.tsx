@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import Link from "next/link";
 import { trpc } from "@/lib/trpc-client";
 import { inBounds, toPosition, type Cell } from "@/lib/grid";
@@ -18,6 +18,7 @@ import { SpreadsheetView } from "./SpreadsheetView";
 import { SlotDetailCard, type FieldDef } from "./SlotDetailCard";
 import { ExportMenu } from "./ExportMenu";
 import { useProjectFields, useSlotValues } from "./fields/useProjectFields";
+import { normalizeValue, type FieldType } from "@/lib/fields";
 
 type View = "diagram" | "spreadsheet";
 
@@ -29,7 +30,8 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   const rack = trpc.rack.get.useQuery({ id: rackId });
   const projectId = rack.data?.project.id ?? "";
 
-  const { fields, createField, saveAsDefault } = useProjectFields(projectId);
+  const { fields, createField, deleteField, saveAsDefault } =
+    useProjectFields(projectId);
   const { setValueByCell, valueForCell } = useSlotValues(rackId);
   const settings = trpc.userSettings.get.useQuery();
   const confirmationEnabled = settings.data?.confirmationEnabled ?? true;
@@ -79,16 +81,24 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     if (value.trim()) setLabel.mutate({ rackId, row, col, label: value.trim() });
     else clear.mutate({ rackId, row, col });
   }
+  const fieldTypeOf = (fieldId: string): FieldType =>
+    fieldDefs.find((f) => f.id === fieldId)?.type ?? "text";
+
   function saveFieldAt(row: number, col: number, fieldId: string, value: string | null) {
-    setValueByCell.mutate({ rackId, row, col, fieldId, value });
+    const v = value === null ? null : normalizeValue(fieldTypeOf(fieldId), value);
+    setValueByCell.mutate({ rackId, row, col, fieldId, value: v });
   }
-  function addField(name: string) {
-    if (projectId) createField.mutate({ projectId, name });
+  function addField(name: string, type: FieldType) {
+    if (projectId) createField.mutate({ projectId, name, type });
   }
-  function selectCell(cell: Cell) {
+  function removeField(fieldId: string, name: string) {
+    if (confirm(`Delete field “${name}”? Its values on every slot will be removed.`))
+      deleteField.mutate({ id: fieldId });
+  }
+  const selectCell = useCallback((cell: Cell) => {
     setSelected(cell);
     setMessage(null);
-  }
+  }, []);
   function doSaveAsDefault() {
     if (!projectId) return;
     saveAsDefault.mutate(
@@ -175,7 +185,7 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
             row: slot.row,
             col: slot.col,
             fieldId: p.fieldId,
-            value: p.value,
+            value: normalizeValue(fieldTypeOf(p.fieldId), p.value),
           });
         }
       }
@@ -324,6 +334,7 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
                 active && saveFieldAt(active.row, active.col, fieldId, value)
               }
               onAddField={addField}
+              onDeleteField={removeField}
               onClose={() => {
                 setSelected(null);
                 setEditingFocused(false);
@@ -342,6 +353,7 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
             onSaveLabel={saveLabelAt}
             onSaveField={saveFieldAt}
             onAddField={addField}
+            onDeleteField={removeField}
             onSaveAsDefault={doSaveAsDefault}
           />
         )}
