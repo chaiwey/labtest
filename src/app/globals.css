@@ -18,7 +18,8 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Subtle brand gradient used on auth + headers */
+/* Subtle brand gradient used on auth + headers. The oversized background plus a
+   slow pan makes the gradient feel alive rather than static. */
 .brand-gradient {
   background-image: linear-gradient(
     135deg,
@@ -26,6 +27,8 @@ body {
     theme("colors.accent.blue") 50%,
     theme("colors.accent.purple") 100%
   );
+  background-size: 200% 200%;
+  animation: brand-pan 8s ease-in-out infinite alternate;
 }
 
 .brand-text {
@@ -35,7 +38,63 @@ body {
     theme("colors.accent.blue"),
     theme("colors.accent.purple")
   );
+  background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  animation: brand-pan 8s ease-in-out infinite alternate;
+}
+
+/* ---------------------------------------------------------------------------
+   Micro-interactions: keyframes + small utilities. Kept here (not Tailwind
+   config) so the easing curves stay co-located with the brand animation.
+   --------------------------------------------------------------------------- */
+@keyframes brand-pan {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.28);
+  }
+}
+
+/* Springy entrance for cards/panels. */
+.animate-fade-up {
+  animation: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Breathing glow for the voice-highlighted slot — the "it found it" moment. */
+.animate-glow {
+  animation: glow-pulse 1.6s ease-in-out infinite;
+}
+
+/* Respect users who prefer reduced motion: keep the design, drop the movement. */
+@media (prefers-reduced-motion: reduce) {
+  .brand-gradient,
+  .brand-text,
+  .animate-fade-up,
+  .animate-glow {
+    animation: none !important;
+  }
 }

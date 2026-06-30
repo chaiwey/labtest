@@ -21,7 +21,7 @@ function SignInInner() {
 
   return (
     <main className="min-h-screen grid place-items-center px-6">
-      <div className="w-full max-w-sm">
+      <div className="w-full max-w-sm animate-fade-up">
         <div className="mb-8 text-center">
           <div className="brand-gradient mx-auto mb-4 h-12 w-12 rounded-2xl shadow-soft" />
           <h1 className="text-3xl font-bold tracking-tight">
@@ -60,7 +60,7 @@ function SignInInner() {
             <button
               type="submit"
               disabled={loading}
-              className="brand-gradient mt-4 w-full rounded-xl px-4 py-2.5 font-medium text-white shadow-soft transition hover:opacity-90 disabled:opacity-60"
+              className="brand-gradient mt-4 w-full rounded-xl px-4 py-2.5 font-medium text-white shadow-soft transition hover:opacity-90 hover:shadow-lg active:scale-95 disabled:opacity-60 motion-reduce:transform-none"
             >
               {loading ? "Sending…" : "Send magic link"}
             </button>

@@ -245,7 +245,7 @@ function ReadOnly({ value }: { value: string }) {
 function EmptyState() {
   return (
     <div className="py-6 text-center">
-      <div className="brand-gradient mx-auto mb-3 h-10 w-10 rounded-full opacity-80" />
+      <div className="brand-gradient mx-auto mb-3 h-10 w-10 animate-pulse rounded-full opacity-80 [animation-duration:3s]" />
       <p className="font-medium text-slate-600">No slot selected</p>
       <p className="mt-1 text-sm text-slate-400">
         Hover a slot to preview it, or click to edit its fields.

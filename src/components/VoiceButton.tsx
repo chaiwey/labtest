@@ -91,15 +91,17 @@ export function VoiceButton({ onTranscript, message }: Props) {
   }, [start, stop]);
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
+    <div className="animate-fade-up rounded-2xl border border-slate-200 bg-white p-5 shadow-soft">
       <div className="flex items-center gap-4">
         <button
           onClick={toggle}
           disabled={!supported}
           aria-pressed={listening}
           className={[
-            "relative grid h-14 w-14 shrink-0 place-items-center rounded-full text-white shadow-soft transition disabled:opacity-40",
-            listening ? "bg-red-500" : "brand-gradient hover:opacity-90",
+            "relative grid h-14 w-14 shrink-0 place-items-center rounded-full text-white shadow-soft transition active:scale-95 disabled:opacity-40 motion-reduce:transform-none",
+            listening
+              ? "bg-red-500 shadow-lg shadow-red-500/30"
+              : "brand-gradient hover:scale-105 hover:opacity-90",
           ].join(" ")}
           title={listening ? "Stop" : "Click to toggle, or hold Space to talk"}
         >
@@ -125,7 +127,7 @@ export function VoiceButton({ onTranscript, message }: Props) {
       </div>
 
       {transcript && (
-        <p className="mt-3 text-sm text-slate-400">
+        <p className="mt-3 animate-fade-up text-sm text-slate-400">
           Heard: <span className="text-slate-600">“{transcript}”</span>
         </p>
       )}

@@ -54,11 +54,11 @@ const SlotCircle = memo(function SlotCircle({
 }) {
   const ring =
     state === "selected"
-      ? "ring-2 ring-accent-blue"
+      ? "ring-2 ring-accent-blue scale-110 z-10"
       : state === "hovered"
         ? "ring-2 ring-accent-purple/70"
         : state === "voice"
-          ? "ring-2 ring-accent-green"
+          ? "ring-2 ring-accent-green animate-glow z-10"
           : "";
   return (
     <button
@@ -66,7 +66,8 @@ const SlotCircle = memo(function SlotCircle({
       onMouseEnter={() => onHover(row, col)}
       onClick={() => onSelect(row, col)}
       className={[
-        "rounded-full border transition",
+        "rounded-full border transition-transform duration-150 ease-out",
+        "hover:scale-110 active:scale-95 motion-reduce:transform-none",
         filled
           ? "border-transparent"
           : "border-slate-200 bg-slate-50 hover:border-accent-blue/50",
@@ -108,7 +109,7 @@ export function RackGrid({
 
   return (
     <div
-      className="overflow-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-soft"
+      className="animate-fade-up overflow-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-soft"
       onMouseLeave={() => onHover(null)}
     >
       <div
