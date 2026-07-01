@@ -30,17 +30,31 @@ export const projectRouter = router({
   create: protectedProcedure
     .input(z.object({ name: z.string().trim().min(1).max(120) }))
     .mutation(async ({ ctx, input }) => {
-      // Seed the project's field schema from the user's default template.
+      // Seed the project's field schema from the user's default template. Every
+      // project needs a "Label" field first (it's the primary column, shown in
+      // the diagram/exports), so prepend one when the template lacks it.
       const defaults = await ctx.prisma.userDefaultField.findMany({
         where: { userId: ctx.userId },
         orderBy: { displayOrder: "asc" },
       });
+      const seed = defaults.map((d) => ({
+        name: d.name,
+        type: d.type,
+        options: d.options,
+      }));
+      if (!seed.some((d) => d.name.trim().toLowerCase() === "label")) {
+        seed.unshift({
+          name: "Label",
+          type: "text" as (typeof defaults)[number]["type"],
+          options: [],
+        });
+      }
       return ctx.prisma.project.create({
         data: {
           name: input.name,
           userId: ctx.userId,
           fields: {
-            create: defaults.map((d, index) => ({
+            create: seed.map((d, index) => ({
               name: d.name,
               type: d.type,
               options: d.options,

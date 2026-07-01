@@ -18,10 +18,8 @@ export interface FieldDef {
 interface Props {
   slot: { position: string; row: number; col: number } | null;
   editable: boolean; // true when this is the pinned/selected cell
-  label: string;
-  fields: FieldDef[];
+  fields: FieldDef[]; // Label is just the first field now
   valueFor: (fieldId: string) => string; // bound to the active cell
-  onSaveLabel: (value: string) => void;
   onSaveField: (fieldId: string, value: string | null) => void;
   onAddField: (name: string, type: FieldType) => void;
   onDeleteField: (fieldId: string, name: string) => void;
@@ -32,10 +30,8 @@ interface Props {
 export function SlotDetailCard({
   slot,
   editable,
-  label,
   fields,
   valueFor,
-  onSaveLabel,
   onSaveField,
   onAddField,
   onDeleteField,
@@ -46,7 +42,7 @@ export function SlotDetailCard({
   const [newField, setNewField] = useState("");
   const [newType, setNewType] = useState<FieldType>("text");
 
-  const hasContent = Boolean(label) || fields.some((f) => valueFor(f.id));
+  const hasContent = fields.some((f) => valueFor(f.id));
 
   function addField() {
     const name = newField.trim();
@@ -86,25 +82,6 @@ export function SlotDetailCard({
             </div>
 
             <dl className="mt-4 space-y-3">
-              <Field label="Label">
-                {editable ? (
-                  <textarea
-                    defaultValue={label}
-                    rows={2}
-                    onFocus={() => onFocusChange(true)}
-                    onBlur={(e) => {
-                      onFocusChange(false);
-                      if (e.target.value.trim() !== label)
-                        onSaveLabel(e.target.value.trim());
-                    }}
-                    placeholder="e.g. Control sample"
-                    className={inputCls}
-                  />
-                ) : (
-                  <ReadOnly value={label} />
-                )}
-              </Field>
-
               {fields.map((f) => (
                 <Field
                   key={f.id}

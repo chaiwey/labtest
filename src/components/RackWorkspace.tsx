@@ -22,9 +22,6 @@ import { normalizeValue, type FieldType } from "@/lib/fields";
 
 type View = "diagram" | "spreadsheet";
 
-// The primary slot.label is exposed to the voice classifier as a leading field.
-const LABEL_ID = "__label__";
-
 export function RackWorkspace({ rackId }: { rackId: string }) {
   const utils = trpc.useUtils();
   const rack = trpc.rack.get.useQuery({ id: rackId });
@@ -47,9 +44,7 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   const [awaitingConfirm, setAwaitingConfirm] = useState(false);
 
   const invalidate = () => utils.rack.get.invalidate({ id: rackId });
-  const setLabel = trpc.slot.setLabel.useMutation({ onSuccess: invalidate });
-  const clear = trpc.slot.clear.useMutation({ onSuccess: invalidate });
-  // Atomic multi-field write for voice entries (label + values in one tx).
+  // Atomic multi-field write for voice entries (all values in one tx).
   const applyEntry = trpc.field.applyEntry.useMutation({
     onSuccess: () => {
       invalidate();
@@ -66,12 +61,6 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     onError: (e) => setToast(`Couldn’t save: ${e.message}`),
   });
 
-  const slotByKey = useMemo(() => {
-    const m = new Map<string, string>();
-    rack.data?.slots.forEach((s) => m.set(`${s.row}:${s.col}`, s.label));
-    return m;
-  }, [rack.data]);
-
   const fieldDefs: FieldDef[] = (fields.data ?? []).map((f) => ({
     id: f.id,
     name: f.name,
@@ -79,36 +68,28 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     options: f.options,
   }));
 
-  // Field names the voice command understands, in the order a positional
-  // ("bare value") utterance is assigned. Label is the leading pseudo-field.
+  // Field names the voice command understands, in display order. Label is now a
+  // real field (the first one), so it's included naturally.
   const voiceFieldNames = useMemo(
-    () => [
-      "Label",
-      ...[...(fields.data ?? [])]
+    () =>
+      [...(fields.data ?? [])]
         .sort((a, b) => a.displayOrder - b.displayOrder)
         .map((f) => f.name),
-    ],
     [fields.data],
   );
 
-  const getLabel = (row: number, col: number) => slotByKey.get(`${row}:${col}`);
   const isFilled = (row: number, col: number) =>
-    Boolean(getLabel(row, col)) ||
     fieldDefs.some((f) => valueForCell(row, col, f.id));
+  // Slot summary for the diagram: the first field with a value (the primary
+  // "Label" field shows bare; other fields show "name: value").
   const summary = (row: number, col: number) => {
-    const label = getLabel(row, col);
-    if (label) return label;
-    for (const f of fieldDefs) {
-      const v = valueForCell(row, col, f.id);
-      if (v) return `${f.name}: ${v}`;
+    for (let i = 0; i < fieldDefs.length; i++) {
+      const v = valueForCell(row, col, fieldDefs[i].id);
+      if (v) return i === 0 ? v : `${fieldDefs[i].name}: ${v}`;
     }
     return undefined;
   };
 
-  function saveLabelAt(row: number, col: number, value: string) {
-    if (value.trim()) setLabel.mutate({ rackId, row, col, label: value.trim() });
-    else clear.mutate({ rackId, row, col });
-  }
   const fieldTypeOf = (fieldId: string): FieldType =>
     fieldDefs.find((f) => f.id === fieldId)?.type ?? "text";
 
@@ -117,22 +98,18 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     setValueByCell.mutate({ rackId, row, col, fieldId, value: v });
   }
 
-  // Bulk write for the spreadsheet (fill/paste/clear). Normalizes each field
-  // cell by its type here (label cells trimmed, not type-parsed), then commits
-  // the whole batch in one mutation. fieldId === null targets the Label column.
-  type BatchCell = { row: number; col: number; fieldId: string | null; value: string | null };
+  // Bulk write for the spreadsheet (fill/paste/clear). Normalizes each cell by
+  // its field type, then commits the whole batch in one mutation.
+  type BatchCell = { row: number; col: number; fieldId: string; value: string | null };
   function saveCellsBatch(cells: BatchCell[]) {
     if (cells.length === 0) return;
-    const normalized = cells.map((c) => {
-      if (c.fieldId === null) {
-        return { ...c, value: c.value ? c.value.trim() || null : null };
-      }
-      const v =
+    const normalized = cells.map((c) => ({
+      ...c,
+      value:
         c.value === null || c.value === ""
           ? null
-          : normalizeValue(fieldTypeOf(c.fieldId), c.value);
-      return { ...c, value: v };
-    });
+          : normalizeValue(fieldTypeOf(c.fieldId), c.value),
+    }));
     setCellsBatch.mutate({ rackId, cells: normalized });
   }
   function addField(name: string, type: FieldType) {
@@ -178,14 +155,12 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
       }
       selectCell(q.cell);
       setVoiceHighlight(q.cell);
-      const label = getLabel(q.cell.row, q.cell.col);
-      const extras = fieldDefs
+      const parts = fieldDefs
         .map((f) => {
           const v = valueForCell(q.cell.row, q.cell.col, f.id);
           return v ? `${f.name} ${v}` : null;
         })
         .filter(Boolean);
-      const parts = [label ? `label ${label}` : null, ...extras].filter(Boolean);
       const sentence = parts.length
         ? `Slot ${spoken(q.position)} has ${parts.join(", ")}.`
         : `Slot ${spoken(q.position)} is empty.`;
@@ -195,15 +170,12 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     }
 
     // 2) Create/Update path — multi-field, order-independent (classify_and_parse).
-    // "Label" is exposed to the classifier as a leading pseudo-field.
-    const classifierFields: VocabField[] = [
-      { id: LABEL_ID, name: "Label", displayOrder: -1 },
-      ...(fields.data ?? []).map((f) => ({
-        id: f.id,
-        name: f.name,
-        displayOrder: f.displayOrder,
-      })),
-    ];
+    // Label is a real field now, so it's matched by name like any other.
+    const classifierFields: VocabField[] = (fields.data ?? []).map((f) => ({
+      id: f.id,
+      name: f.name,
+      displayOrder: f.displayOrder,
+    }));
     const result = classify_and_parse(transcript, classifierFields);
     if (!result.slot) {
       setMessage("Didn’t catch a slot. Try “Slot A3, type control, owner Sarah”.");
@@ -225,23 +197,18 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     }
 
     // Deferred commit so we can require confirmation first. One atomic mutation
-    // upserts the slot once and writes the label + all field values together —
-    // no concurrent slot inserts, so nothing is lost to the unique constraint.
+    // upserts the slot once and writes all field values together — no concurrent
+    // slot inserts, so nothing is lost to the unique constraint.
     const applyPairs = () => {
-      let label: string | null = null;
       const values: { fieldId: string; value: string | null }[] = [];
       for (const p of result.field_value_pairs) {
-        if (!p.value) continue;
-        if (p.fieldId === LABEL_ID) {
-          label = p.value;
-        } else if (p.fieldId) {
-          values.push({
-            fieldId: p.fieldId,
-            value: normalizeValue(fieldTypeOf(p.fieldId), p.value),
-          });
-        }
+        if (!p.value || !p.fieldId) continue;
+        values.push({
+          fieldId: p.fieldId,
+          value: normalizeValue(fieldTypeOf(p.fieldId), p.value),
+        });
       }
-      applyEntry.mutate({ rackId, row: slot.row, col: slot.col, label, values });
+      applyEntry.mutate({ rackId, row: slot.row, col: slot.col, values });
     };
 
     const readback = describeForConfirmation(result);
@@ -306,7 +273,13 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   if (!rack.data)
     return <p className="mx-auto max-w-6xl px-6 py-10 text-slate-500">Rack not found.</p>;
 
-  const exportSlots = rack.data.slots.map((s) => ({ row: s.row, col: s.col, label: s.label }));
+  // Export the primary (first) field — the "Label" — as each slot's label.
+  const labelFieldId = fieldDefs[0]?.id;
+  const exportSlots = rack.data.slots.map((s) => ({
+    row: s.row,
+    col: s.col,
+    label: labelFieldId ? valueForCell(s.row, s.col, labelFieldId) : "",
+  }));
 
   const active: Cell | null =
     editingFocused && selected ? selected : (hovered ?? selected);
@@ -381,13 +354,9 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
             <SlotDetailCard
               slot={activeInfo}
               editable={editable}
-              label={active ? (getLabel(active.row, active.col) ?? "") : ""}
               fields={fieldDefs}
               valueFor={(fieldId) =>
                 active ? valueForCell(active.row, active.col, fieldId) : ""
-              }
-              onSaveLabel={(value) =>
-                active && saveLabelAt(active.row, active.col, value)
               }
               onSaveField={(fieldId, value) =>
                 active && saveFieldAt(active.row, active.col, fieldId, value)
@@ -407,7 +376,6 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
             rows={rack.data.rows}
             cols={rack.data.cols}
             fields={fieldDefs}
-            getLabel={getLabel}
             valueForCell={valueForCell}
             isFilled={isFilled}
             onSaveCells={saveCellsBatch}

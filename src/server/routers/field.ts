@@ -123,7 +123,18 @@ export const fieldRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      await assertOwnedField(ctx, input.id);
+      const { projectId } = await assertOwnedField(ctx, input.id);
+      // A rack must always keep at least one field (Label is a normal field now,
+      // so this also stops deleting the last column).
+      const remaining = await ctx.prisma.projectField.count({
+        where: { projectId, archived: false },
+      });
+      if (remaining <= 1) {
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "Can’t delete the last field — a rack needs at least one.",
+        });
+      }
       await ctx.prisma.$transaction([
         ctx.prisma.projectField.update({
           where: { id: input.id },
@@ -187,8 +198,6 @@ export const fieldRouter = router({
         rackId: z.string(),
         row: z.number().int().min(0),
         col: z.number().int().min(0),
-        // null/undefined = leave the label untouched; a string sets it.
-        label: z.string().max(500).nullable().optional(),
         values: z
           .array(
             z.object({
@@ -225,13 +234,9 @@ export const fieldRouter = router({
           where: {
             rackId_row_col: { rackId: input.rackId, row: input.row, col: input.col },
           },
-          create: {
-            rackId: input.rackId,
-            row: input.row,
-            col: input.col,
-            label: input.label ?? "",
-          },
-          update: input.label != null ? { label: input.label } : {},
+          // slot.label is dormant (Label is a field now); keep the column filled.
+          create: { rackId: input.rackId, row: input.row, col: input.col, label: "" },
+          update: {},
           select: { id: true },
         });
         for (const v of input.values) {
@@ -250,11 +255,9 @@ export const fieldRouter = router({
       });
     }),
 
-  // Bulk write for the spreadsheet fill/paste/clear operations: many cells,
-  // possibly spanning the label column and several fields, across many slots.
-  // Group by (row,col), upsert each slot ONCE, then its label + values — all in
-  // one transaction (same race-safety reasoning as applyEntry). A cell with
-  // fieldId === null targets the slot label.
+  // Bulk write for the spreadsheet fill/paste/clear operations: many field
+  // cells across many slots. Group by (row,col), upsert each slot ONCE, then its
+  // values — all in one transaction (same race-safety reasoning as applyEntry).
   setCellsBatch: protectedProcedure
     .input(
       z.object({
@@ -264,7 +267,7 @@ export const fieldRouter = router({
             z.object({
               row: z.number().int().min(0),
               col: z.number().int().min(0),
-              fieldId: z.string().nullable(), // null = the Label column
+              fieldId: z.string(),
               value: z.string().max(1000).nullable(),
             }),
           )
@@ -286,22 +289,18 @@ export const fieldRouter = router({
       }
 
       // All referenced field ids must belong to this project.
-      const fieldIds = [
-        ...new Set(input.cells.map((c) => c.fieldId).filter((id): id is string => id !== null)),
-      ];
-      if (fieldIds.length) {
-        const count = await ctx.prisma.projectField.count({
-          where: { id: { in: fieldIds }, projectId: rack.projectId, archived: false },
-        });
-        if (count !== fieldIds.length) {
-          throw new TRPCError({ code: "NOT_FOUND", message: "Unknown field." });
-        }
+      const fieldIds = [...new Set(input.cells.map((c) => c.fieldId))];
+      const count = await ctx.prisma.projectField.count({
+        where: { id: { in: fieldIds }, projectId: rack.projectId, archived: false },
+      });
+      if (count !== fieldIds.length) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Unknown field." });
       }
 
       // Group cells by slot coordinate.
       const bySlot = new Map<
         string,
-        { row: number; col: number; label?: string | null; values: { fieldId: string; value: string | null }[] }
+        { row: number; col: number; values: { fieldId: string; value: string | null }[] }
       >();
       for (const c of input.cells) {
         const key = `${c.row}:${c.col}`;
@@ -310,8 +309,7 @@ export const fieldRouter = router({
           entry = { row: c.row, col: c.col, values: [] };
           bySlot.set(key, entry);
         }
-        if (c.fieldId === null) entry.label = c.value;
-        else entry.values.push({ fieldId: c.fieldId, value: c.value });
+        entry.values.push({ fieldId: c.fieldId, value: c.value });
       }
 
       await ctx.prisma.$transaction(async (tx) => {
@@ -320,13 +318,9 @@ export const fieldRouter = router({
             where: {
               rackId_row_col: { rackId: input.rackId, row: entry.row, col: entry.col },
             },
-            create: {
-              rackId: input.rackId,
-              row: entry.row,
-              col: entry.col,
-              label: entry.label ?? "",
-            },
-            update: entry.label !== undefined ? { label: entry.label ?? "" } : {},
+            // slot.label dormant; keep the NOT NULL column filled on create.
+            create: { rackId: input.rackId, row: entry.row, col: entry.col, label: "" },
+            update: {},
             select: { id: true },
           });
           for (const v of entry.values) {

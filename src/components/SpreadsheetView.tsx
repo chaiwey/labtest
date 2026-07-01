@@ -15,7 +15,7 @@ type Pos = { r: number; c: number };
 export type BatchCell = {
   row: number;
   col: number;
-  fieldId: string | null; // null = the Label column
+  fieldId: string;
   value: string | null;
 };
 
@@ -23,8 +23,7 @@ interface Props {
   rackId: string;
   rows: number;
   cols: number;
-  fields: FieldDef[];
-  getLabel: (row: number, col: number) => string | undefined;
+  fields: FieldDef[]; // Label is just the first field now
   valueForCell: (row: number, col: number, fieldId: string) => string;
   isFilled: (row: number, col: number) => boolean;
   // Single write path for edits, fill, paste and clear (batched).
@@ -43,7 +42,6 @@ export function SpreadsheetView({
   rows,
   cols,
   fields,
-  getLabel,
   valueForCell,
   isFilled,
   onSaveCells,
@@ -64,16 +62,14 @@ export function SpreadsheetView({
     [rows, cols, onlyFilled, isFilled],
   );
 
-  // ----- grid geometry -------------------------------------------------------
-  const totalCols = 1 + fields.length; // col 0 = Label
-  const colFieldId = (c: number): string | null => (c === 0 ? null : fields[c - 1].id);
-  const colType = (c: number): FieldType => (c === 0 ? "text" : fields[c - 1].type);
+  // ----- grid geometry (every column is a field; Label is fields[0]) ---------
+  const totalCols = fields.length;
+  const colFieldId = (c: number): string => fields[c].id;
+  const colType = (c: number): FieldType => fields[c].type;
   const cellValue = (r: number, c: number): string => {
     const cell = cells[r];
     if (!cell) return "";
-    return c === 0
-      ? getLabel(cell.row, cell.col) ?? ""
-      : valueForCell(cell.row, cell.col, fields[c - 1].id);
+    return valueForCell(cell.row, cell.col, fields[c].id);
   };
 
   // ----- column widths (resizable, persisted per rack) -----------------------
@@ -88,7 +84,7 @@ export function SpreadsheetView({
   });
   const widthsRef = useRef(widths);
   widthsRef.current = widths;
-  const colKeys = useMemo(() => ["slot", "label", ...fields.map((f) => f.id)], [fields]);
+  const colKeys = useMemo(() => ["slot", ...fields.map((f) => f.id)], [fields]);
   const widthOf = (key: string) => widths[key] ?? defaultWidth(key);
   const tableWidth = colKeys.reduce((s, k) => s + widthOf(k), 0);
 
@@ -196,8 +192,8 @@ export function SpreadsheetView({
   const undoStack = useRef<HistEntry[]>([]);
   const redoStack = useRef<HistEntry[]>([]);
 
-  const currentValueAt = (row: number, col: number, fieldId: string | null): string =>
-    fieldId === null ? getLabel(row, col) ?? "" : valueForCell(row, col, fieldId);
+  const currentValueAt = (row: number, col: number, fieldId: string): string =>
+    valueForCell(row, col, fieldId);
 
   function applyBatch(after: BatchCell[]) {
     if (after.length === 0) return;
@@ -531,16 +527,6 @@ export function SpreadsheetView({
               <th className="relative border-b border-r border-slate-100 px-4 py-2 font-medium">
                 Slot
                 <Resizer colKey="slot" />
-              </th>
-              <th
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setMenu({ x: e.clientX, y: e.clientY, kind: "label" });
-                }}
-                className="relative border-b border-r border-slate-100 px-4 py-2 font-medium"
-              >
-                Label
-                <Resizer colKey="label" />
               </th>
               {fields.map((f) => (
                 <th
