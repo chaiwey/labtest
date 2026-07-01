@@ -142,7 +142,16 @@ function parseCreate(
   const tagged: { field: FieldDef; value: string; via: MatchVia; score: number }[] = [];
   const untagged: string[] = [];
 
-  for (const seg of raw.split(",")) {
+  // Commas separate field/value pairs — EXCEPT the comma inside a spoken date
+  // ("February 23rd, 2026"), which Whisper punctuates. A comma immediately
+  // before a 4-digit year is part of the value, not a separator, so keep the
+  // year attached instead of orphaning it onto the next field. Whisper also
+  // sometimes tacks an ordinal onto the year ("2026th"), so tolerate that (and
+  // there's no \b after "2026" in "2026th", which is why the suffix is matched
+  // explicitly rather than relied on).
+  const segmented = raw.replace(/,\s*(?=\d{4}(?:st|nd|rd|th)?\b)/gi, " ");
+
+  for (const seg of segmented.split(",")) {
     walkSegment(tokenize(cleanSegment(seg, slot)), vocab, tagged, untagged);
   }
 
@@ -155,7 +164,7 @@ function parseCreate(
     const field = i < remaining.length ? remaining[i] : null;
     return {
       fieldId: field?.id ?? null,
-      fieldName: field?.name ?? "(unmapped)",
+      fieldName: field?.name ?? "",
       value,
       matchedVia: "positional",
       score: field ? 0.5 : 0.2,
@@ -239,7 +248,7 @@ function parseUpdate(
     const field = fields[0] ?? null;
     pair = {
       fieldId: field?.id ?? null,
-      fieldName: field?.name ?? "(unmapped)",
+      fieldName: field?.name ?? "",
       value,
       matchedVia: "positional",
       score: field ? 0.4 : 0.2,
@@ -286,12 +295,20 @@ export function classify_and_parse(
 /** Human-readable confirmation readback for the confirmation flow (Part C/D). */
 export function describeForConfirmation(result: ClassifyResult): string {
   const slot = result.slot ? `slot ${spell(result.slot.position)}` : "an unknown slot";
-  const parts = result.field_value_pairs.map((p) => `${p.fieldName} ${p.value}`);
+  // A pair with no fieldId is a spoken value we couldn't match to any field —
+  // say so plainly instead of leaking an "(unmapped)" placeholder.
+  const parts = result.field_value_pairs.map((p) =>
+    p.fieldId ? `${p.fieldName} ${p.value}` : `“${p.value}” (no matching field)`,
+  );
   const verb = result.intent === "update" ? "Update" : "Set";
   let msg = `${verb} ${slot}: ${parts.join(", ")}.`;
   if (result.used_positional_fallback) {
-    const order = result.field_value_pairs.map((p) => p.fieldName).join(", then ");
-    msg += ` Assuming field order: ${order} — confirm?`;
+    const order = result.field_value_pairs
+      .filter((p) => p.fieldId)
+      .map((p) => p.fieldName)
+      .join(", then ");
+    if (order) msg += ` Assuming field order: ${order} — confirm?`;
+    else msg += " Confirm?";
   } else {
     msg += " Confirm?";
   }

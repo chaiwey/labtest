@@ -7,6 +7,15 @@
   --foreground: #0f172a;
 }
 
+html {
+  /* Always reserve space for the vertical scrollbar. Without this, a scrollbar
+     that appears/disappears (e.g. when a hover-driven panel changes the page
+     height) shifts the content width, which reflows the grid and moves the
+     hovered cell out from under the cursor — that fired mouseleave/mouseenter
+     in a loop and made the whole layout jump on hover. */
+  scrollbar-gutter: stable;
+}
+
 html,
 body {
   background: var(--background);

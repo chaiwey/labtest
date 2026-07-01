@@ -102,3 +102,25 @@ describe("Fallbacks — positional + ambiguous", () => {
     expect(r.confidence).toBeLessThanOrEqual(0.55);
   });
 });
+
+describe("CREATE — spoken dates with a year", () => {
+  const DATED: FieldDef[] = [
+    { id: "f_label", name: "Label", displayOrder: 0 },
+    { id: "f_date", name: "Date Created", displayOrder: 1 },
+  ];
+  const runD = (t: string) => classify_and_parse(t, DATED);
+
+  it("keeps the year attached across the date comma (not orphaned onto Label)", () => {
+    const r = runD("slot A3 date created February 23rd, 2026");
+    expect(r.field_value_pairs).toHaveLength(1);
+    expect(r.field_value_pairs[0]).toMatchObject({
+      fieldName: "Date Created",
+      value: "February 23rd 2026",
+    });
+  });
+
+  it("still splits genuine pair commas when no year follows", () => {
+    const r = runD("slot A3 label sample one, date created tomorrow");
+    expect(asMap(r)).toEqual({ Label: "sample one", "Date Created": "tomorrow" });
+  });
+});

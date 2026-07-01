@@ -44,7 +44,10 @@ export function parseDate(raw: string, today = new Date()): string | null {
     .toLowerCase()
     .trim()
     .replace(/(\d+)(st|nd|rd|th)\b/g, "$1") // 3rd -> 3
-    .replace(/[,]/g, " ")
+    // Commas AND periods → spaces. Whisper punctuates dictation ("June 2nd,
+    // 2026.") and a trailing period would otherwise break the year match and
+    // leave the raw junk string saved into a date field.
+    .replace(/[.,]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (!s) return null;

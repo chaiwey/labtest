@@ -6,10 +6,14 @@ import { speechSupported, startListening, type Listener } from "@/lib/voice/spee
 interface Props {
   onTranscript: (transcript: string) => void;
   message?: string | null;
+  // Field names the voice command understands, in positional order (Label
+  // first). Shown as a reference so the user knows the exact names to say.
+  fields?: string[];
 }
 
-export function VoiceButton({ onTranscript, message }: Props) {
+export function VoiceButton({ onTranscript, message, fields }: Props) {
   const [listening, setListening] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const [transcript, setTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [supported, setSupported] = useState(true);
@@ -41,10 +45,21 @@ export function VoiceButton({ onTranscript, message }: Props) {
       (msg) => setError(msg),
       () => {
         setListening(false);
+        setTranscribing(false);
         listeningRef.current = false;
       },
-      // continuous so a pause between "slot B3" and the label won't cut it off.
-      { continuous: true, onInterim: (t) => setTranscript(t) },
+      {
+        // Live preview while speaking (best-effort; Whisper gives the final text).
+        onInterim: (t) => setTranscript(t),
+        // Whisper transcribes after the clip is sent; reflect that in the UI.
+        // Once recording stops we're no longer "listening", we're waiting on text.
+        onStatus: (s) => {
+          if (s === "transcribing") {
+            setListening(false);
+            setTranscribing(true);
+          }
+        },
+      },
     );
   }, []);
 
@@ -101,18 +116,27 @@ export function VoiceButton({ onTranscript, message }: Props) {
             "relative grid h-14 w-14 shrink-0 place-items-center rounded-full text-white shadow-soft transition active:scale-95 disabled:opacity-40 motion-reduce:transform-none",
             listening
               ? "bg-red-500 shadow-lg shadow-red-500/30"
-              : "brand-gradient hover:scale-105 hover:opacity-90",
+              : transcribing
+                ? "bg-accent-blue shadow-lg shadow-accent-blue/30"
+                : "brand-gradient hover:scale-105 hover:opacity-90",
           ].join(" ")}
           title={listening ? "Stop" : "Click to toggle, or hold Space to talk"}
         >
           {listening && (
             <span className="absolute inset-0 animate-ping rounded-full bg-red-400/60" />
           )}
+          {transcribing && (
+            <span className="absolute inset-0 animate-pulse rounded-full bg-accent-blue/50" />
+          )}
           <MicIcon />
         </button>
         <div className="min-w-0">
           <p className="font-semibold text-slate-800">
-            {listening ? "Listening…" : "Voice control"}
+            {listening
+              ? "Listening…"
+              : transcribing
+                ? "Transcribing…"
+                : "Voice control"}
           </p>
           <p className="mt-0.5 text-sm text-slate-500">
             Hold{" "}
@@ -125,6 +149,25 @@ export function VoiceButton({ onTranscript, message }: Props) {
           </p>
         </div>
       </div>
+
+      {fields && fields.length > 0 && (
+        <div className="mt-4 border-t border-slate-100 pt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+            Your fields — say the name, any order (bare values fill in this order)
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {fields.map((name, i) => (
+              <span
+                key={`${name}-${i}`}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-600"
+              >
+                <span className="text-slate-400">{i + 1}</span>
+                <span className="font-medium text-slate-700">{name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {transcript && (
         <p className="mt-3 animate-fade-up text-sm text-slate-400">
@@ -141,8 +184,8 @@ export function VoiceButton({ onTranscript, message }: Props) {
       )}
       {!supported && (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-600">
-          Voice input isn’t supported here — use Chrome or Edge. You can still edit
-          slots manually below.
+          Voice input needs microphone recording, which isn’t available in this
+          browser. You can still edit slots manually below.
         </p>
       )}
     </div>

@@ -30,7 +30,7 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   const rack = trpc.rack.get.useQuery({ id: rackId });
   const projectId = rack.data?.project.id ?? "";
 
-  const { fields, createField, deleteField, saveAsDefault } =
+  const { fields, createField, updateField, deleteField, saveAsDefault } =
     useProjectFields(projectId);
   const { setValueByCell, valueForCell } = useSlotValues(rackId);
   const settings = trpc.userSettings.get.useQuery();
@@ -49,6 +49,22 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   const invalidate = () => utils.rack.get.invalidate({ id: rackId });
   const setLabel = trpc.slot.setLabel.useMutation({ onSuccess: invalidate });
   const clear = trpc.slot.clear.useMutation({ onSuccess: invalidate });
+  // Atomic multi-field write for voice entries (label + values in one tx).
+  const applyEntry = trpc.field.applyEntry.useMutation({
+    onSuccess: () => {
+      invalidate();
+      utils.field.valuesByRack.invalidate({ rackId });
+    },
+    onError: (e) => setMessage(`Couldn’t save: ${e.message}`),
+  });
+  // Bulk write for spreadsheet fill/paste/clear.
+  const setCellsBatch = trpc.field.setCellsBatch.useMutation({
+    onSuccess: () => {
+      invalidate();
+      utils.field.valuesByRack.invalidate({ rackId });
+    },
+    onError: (e) => setToast(`Couldn’t save: ${e.message}`),
+  });
 
   const slotByKey = useMemo(() => {
     const m = new Map<string, string>();
@@ -62,6 +78,18 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     type: f.type as FieldDef["type"],
     options: f.options,
   }));
+
+  // Field names the voice command understands, in the order a positional
+  // ("bare value") utterance is assigned. Label is the leading pseudo-field.
+  const voiceFieldNames = useMemo(
+    () => [
+      "Label",
+      ...[...(fields.data ?? [])]
+        .sort((a, b) => a.displayOrder - b.displayOrder)
+        .map((f) => f.name),
+    ],
+    [fields.data],
+  );
 
   const getLabel = (row: number, col: number) => slotByKey.get(`${row}:${col}`);
   const isFilled = (row: number, col: number) =>
@@ -88,8 +116,31 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     const v = value === null ? null : normalizeValue(fieldTypeOf(fieldId), value);
     setValueByCell.mutate({ rackId, row, col, fieldId, value: v });
   }
+
+  // Bulk write for the spreadsheet (fill/paste/clear). Normalizes each field
+  // cell by its type here (label cells trimmed, not type-parsed), then commits
+  // the whole batch in one mutation. fieldId === null targets the Label column.
+  type BatchCell = { row: number; col: number; fieldId: string | null; value: string | null };
+  function saveCellsBatch(cells: BatchCell[]) {
+    if (cells.length === 0) return;
+    const normalized = cells.map((c) => {
+      if (c.fieldId === null) {
+        return { ...c, value: c.value ? c.value.trim() || null : null };
+      }
+      const v =
+        c.value === null || c.value === ""
+          ? null
+          : normalizeValue(fieldTypeOf(c.fieldId), c.value);
+      return { ...c, value: v };
+    });
+    setCellsBatch.mutate({ rackId, cells: normalized });
+  }
   function addField(name: string, type: FieldType) {
     if (projectId) createField.mutate({ projectId, name, type });
+  }
+  function renameField(fieldId: string, name: string) {
+    const n = name.trim();
+    if (n) updateField.mutate({ id: fieldId, name: n });
   }
   function removeField(fieldId: string, name: string) {
     if (confirm(`Delete field “${name}”? Its values on every slot will be removed.`))
@@ -173,22 +224,24 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
       return;
     }
 
-    // Deferred commit so we can require confirmation first.
+    // Deferred commit so we can require confirmation first. One atomic mutation
+    // upserts the slot once and writes the label + all field values together —
+    // no concurrent slot inserts, so nothing is lost to the unique constraint.
     const applyPairs = () => {
+      let label: string | null = null;
+      const values: { fieldId: string; value: string | null }[] = [];
       for (const p of result.field_value_pairs) {
         if (!p.value) continue;
         if (p.fieldId === LABEL_ID) {
-          setLabel.mutate({ rackId, row: slot.row, col: slot.col, label: p.value });
+          label = p.value;
         } else if (p.fieldId) {
-          setValueByCell.mutate({
-            rackId,
-            row: slot.row,
-            col: slot.col,
+          values.push({
             fieldId: p.fieldId,
             value: normalizeValue(fieldTypeOf(p.fieldId), p.value),
           });
         }
       }
+      applyEntry.mutate({ rackId, row: slot.row, col: slot.col, label, values });
     };
 
     const readback = describeForConfirmation(result);
@@ -212,7 +265,9 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
         setAwaitingConfirm(false);
       },
       undefined,
-      { continuous: false },
+      // Hands-free: no key is held for the yes/no reply, so auto-stop once the
+      // speaker finishes (short window — "yes"/"no" are quick).
+      { autoStop: { silenceMs: 900, maxMs: 5000 } },
     );
   }
 
@@ -284,7 +339,11 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
       </div>
 
       <div className="mt-6">
-        <VoiceButton onTranscript={handleTranscript} message={message} />
+        <VoiceButton
+          onTranscript={handleTranscript}
+          message={message}
+          fields={voiceFieldNames}
+        />
         {awaitingConfirm && (
           <div className="mt-2 flex items-center gap-2 rounded-xl bg-accent-purple/10 px-3 py-2 text-sm text-accent-purple">
             <span className="relative flex h-2.5 w-2.5">
@@ -344,15 +403,16 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
           </div>
         ) : (
           <SpreadsheetView
+            rackId={rackId}
             rows={rack.data.rows}
             cols={rack.data.cols}
             fields={fieldDefs}
             getLabel={getLabel}
             valueForCell={valueForCell}
             isFilled={isFilled}
-            onSaveLabel={saveLabelAt}
-            onSaveField={saveFieldAt}
+            onSaveCells={saveCellsBatch}
             onAddField={addField}
+            onRenameField={renameField}
             onDeleteField={removeField}
             onSaveAsDefault={doSaveAsDefault}
           />
