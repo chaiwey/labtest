@@ -88,6 +88,20 @@ export function SpreadsheetView({
   const widthOf = (key: string) => widths[key] ?? defaultWidth(key);
   const tableWidth = colKeys.reduce((s, k) => s + widthOf(k), 0);
 
+  const persistWidths = (w: Record<string, number>) => {
+    try {
+      localStorage.setItem(storeKey, JSON.stringify(w));
+    } catch {
+      /* ignore */
+    }
+  };
+  const setColWidth = (key: string, w: number) =>
+    setWidths((p) => {
+      const next = { ...p, [key]: w };
+      persistWidths(next);
+      return next;
+    });
+
   const resizeRef = useRef<{ key: string; x: number; w: number } | null>(null);
   function startResize(e: React.MouseEvent, key: string) {
     e.preventDefault();
@@ -102,8 +116,20 @@ export function SpreadsheetView({
       setWidths((p) => ({ ...p, [r.key]: w }));
     };
     const up = () => {
-      if (!resizeRef.current) return;
+      const r = resizeRef.current;
+      if (!r) return;
       resizeRef.current = null;
+      const newW = widthsRef.current[r.key] ?? defaultWidth(r.key);
+      persistWidths(widthsRef.current);
+      // Make the resize undoable (⌘Z / ⌘Y), sharing the cell history stack.
+      if (newW !== r.w) {
+        const { key, w: oldW } = r;
+        undoStack.current.push({
+          undo: () => setColWidth(key, oldW),
+          redo: () => setColWidth(key, newW),
+        });
+        redoStack.current = [];
+      }
       try {
         localStorage.setItem(storeKey, JSON.stringify(widthsRef.current));
       } catch {
@@ -343,33 +369,42 @@ export function SpreadsheetView({
     setActive(clamp(pos));
   }
 
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (editing) return;
-    if (cells.length === 0) return;
-    const a = active ?? { r: 0, c: 0 };
+  // Global key handler (see the window listener near the end). Runs off the
+  // event target, not DOM focus, so navigation works right after a cell click —
+  // and it bails when the event comes from any input, so typing in the column
+  // rename box / cell editor / modal never leaks into cell navigation.
+  function handleKey(e: KeyboardEvent) {
+    const t = e.target as HTMLElement | null;
+    if (
+      t &&
+      (t.tagName === "INPUT" ||
+        t.tagName === "TEXTAREA" ||
+        t.tagName === "SELECT" ||
+        t.isContentEditable)
+    )
+      return;
+    if (editing || editingHeader || modalOpen || menu) return;
+    if (cells.length === 0 || !active) return;
+    const a = active;
     const meta = e.metaKey || e.ctrlKey;
 
-    if (meta && e.key.toLowerCase() === "z") {
-      e.preventDefault();
-      e.shiftKey ? redo() : undo();
+    if (meta) {
+      const k = e.key.toLowerCase();
+      if (k === "z") {
+        e.preventDefault();
+        e.shiftKey ? redo() : undo();
+      } else if (k === "y") {
+        e.preventDefault();
+        redo();
+      } else if (k === "c") {
+        e.preventDefault();
+        copy();
+      } else if (k === "v") {
+        e.preventDefault();
+        paste();
+      }
       return;
     }
-    if (meta && e.key.toLowerCase() === "y") {
-      e.preventDefault();
-      redo();
-      return;
-    }
-    if (meta && e.key.toLowerCase() === "c") {
-      e.preventDefault();
-      copy();
-      return;
-    }
-    if (meta && e.key.toLowerCase() === "v") {
-      e.preventDefault();
-      paste();
-      return;
-    }
-    if (meta) return;
 
     switch (e.key) {
       case "ArrowUp":
@@ -394,7 +429,7 @@ export function SpreadsheetView({
         return;
       case "Enter":
         e.preventDefault();
-        if (active) beginEdit(active);
+        beginEdit(a);
         return;
       case "Backspace":
       case "Delete":
@@ -405,12 +440,20 @@ export function SpreadsheetView({
         setAnchor(active);
         return;
       default:
-        if (e.key.length === 1 && !e.altKey && active) {
+        // Start editing on a printable key (skip Space — it's push-to-talk).
+        if (e.key.length === 1 && e.key !== " " && !e.altKey) {
           e.preventDefault();
-          beginEdit(active, e.key);
+          beginEdit(a, e.key);
         }
     }
   }
+  const handleKeyRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  handleKeyRef.current = handleKey;
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => handleKeyRef.current(e);
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
 
   // ----- header rename / context menu / add-field modal ----------------------
   function startHeaderEdit(fieldId: string, name: string) {
@@ -510,8 +553,7 @@ export function SpreadsheetView({
       <div
         ref={containerRef}
         tabIndex={0}
-        onKeyDown={onKeyDown}
-        className="max-h-[60vh] overflow-auto outline-none"
+        className="max-h-[60vh] select-none overflow-auto outline-none"
       >
         <table
           className="border-separate border-spacing-0 text-sm"
@@ -548,7 +590,7 @@ export function SpreadsheetView({
                         else if (e.key === "Escape") setEditingHeader(null);
                       }}
                       onBlur={() => commitHeaderEdit(f.id, f.name)}
-                      className="w-full rounded border border-accent-blue/40 bg-white px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-600 outline-none ring-2 ring-accent-blue/20"
+                      className="w-full select-text rounded border border-accent-blue/40 bg-white px-1.5 py-0.5 text-xs font-medium uppercase tracking-wide text-slate-600 outline-none ring-2 ring-accent-blue/20"
                     />
                   ) : (
                     <button
@@ -598,7 +640,7 @@ export function SpreadsheetView({
                       onDoubleClick={() => beginEdit({ r, c })}
                       style={{ boxShadow: selShadow(r, c) }}
                       className={[
-                        "relative overflow-hidden border-b border-r border-slate-100 p-0 transition-colors duration-100",
+                        "relative overflow-hidden border-b border-r border-slate-100 p-0",
                         isActive ? "bg-white" : selected ? "bg-accent-blue/10" : "",
                         inFill
                           ? "bg-accent-blue/5 outline outline-1 -outline-offset-1 outline-dashed outline-accent-blue/40"
@@ -630,7 +672,7 @@ export function SpreadsheetView({
                             }
                           }}
                           onBlur={() => editing && commitEdit(null)}
-                          className="h-8 w-full bg-white px-2 outline-none ring-2 ring-accent-blue/40"
+                          className="h-8 w-full select-text bg-white px-2 outline-none ring-2 ring-accent-blue/40"
                         />
                       ) : (
                         <div className="flex h-8 items-center px-2">
