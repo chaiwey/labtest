@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { allCells, toPosition } from "@/lib/grid";
 import type { FieldDef } from "./SlotDetailCard";
 import {
@@ -501,20 +501,40 @@ export function SpreadsheetView({
     setModalOpen(false);
   }
 
-  const showHandle = (r: number, c: number) =>
-    !editing && sel !== null && r === sel.r1 && c === sel.c1;
-
-  const SEL_BORDER = "#3b82f6";
-  function selShadow(r: number, c: number): string | undefined {
-    if (!inRect(sel, r, c)) return undefined;
-    const s = sel!;
-    const parts: string[] = [];
-    if (r === s.r0) parts.push(`inset 0 2px 0 0 ${SEL_BORDER}`);
-    if (r === s.r1) parts.push(`inset 0 -2px 0 0 ${SEL_BORDER}`);
-    if (c === s.c0) parts.push(`inset 2px 0 0 0 ${SEL_BORDER}`);
-    if (c === s.c1) parts.push(`inset -2px 0 0 0 ${SEL_BORDER}`);
-    return parts.length ? parts.join(", ") : undefined;
-  }
+  // Selection is drawn as ONE overlay rectangle (not per-cell borders) so it can
+  // slide/resize smoothly to the new selection, the way Excel does. We measure
+  // the pixel rect of the top-left and bottom-right selected cells relative to
+  // the scrolling content wrapper; the values are content-relative, so they stay
+  // correct as the container scrolls without recomputing.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [selRect, setSelRect] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
+  useLayoutEffect(() => {
+    const wrap = wrapperRef.current;
+    if (!sel || !wrap) {
+      setSelRect(null);
+      return;
+    }
+    const tl = wrap.querySelector(`[data-cell="${sel.r0}-${sel.c0}"]`);
+    const br = wrap.querySelector(`[data-cell="${sel.r1}-${sel.c1}"]`);
+    if (!tl || !br) {
+      setSelRect(null);
+      return;
+    }
+    const w = wrap.getBoundingClientRect();
+    const a = tl.getBoundingClientRect();
+    const b = br.getBoundingClientRect();
+    setSelRect({
+      left: a.left - w.left,
+      top: a.top - w.top,
+      width: b.right - a.left,
+      height: b.bottom - a.top,
+    });
+  }, [sel, widths, cells.length, totalCols]);
 
   const Resizer = ({ colKey }: { colKey: string }) => (
     <span
@@ -555,6 +575,7 @@ export function SpreadsheetView({
         tabIndex={0}
         className="max-h-[60vh] select-none overflow-auto outline-none"
       >
+        <div ref={wrapperRef} className="relative" style={{ width: tableWidth }}>
         <table
           className="border-separate border-spacing-0 text-sm"
           style={{ tableLayout: "fixed", width: tableWidth }}
@@ -638,7 +659,6 @@ export function SpreadsheetView({
                         else if (draggingRef.current) setActive({ r, c });
                       }}
                       onDoubleClick={() => beginEdit({ r, c })}
-                      style={{ boxShadow: selShadow(r, c) }}
                       className={[
                         "relative overflow-hidden border-b border-r border-slate-100 p-0",
                         isActive ? "bg-white" : selected ? "bg-accent-blue/10" : "",
@@ -683,18 +703,6 @@ export function SpreadsheetView({
                           </span>
                         </div>
                       )}
-                      {showHandle(r, c) && (
-                        <span
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            fillingRef.current = true;
-                            setFillEnd({ r, c });
-                          }}
-                          title="Drag to fill"
-                          className="absolute -bottom-[3px] -right-[3px] z-10 h-2 w-2 cursor-crosshair rounded-[1px] bg-accent-blue"
-                        />
-                      )}
                     </td>
                   );
                 })}
@@ -709,6 +717,36 @@ export function SpreadsheetView({
             )}
           </tbody>
         </table>
+
+        {/* Single selection rectangle that slides to the new selection. Freshly
+            mounted (first click) it appears in place; while it stays mounted,
+            moving the selection animates its position/size. */}
+        {selRect && !editing && (
+          <div
+            className="pointer-events-none absolute z-[5] rounded-[1px] ring-2 ring-inset ring-accent-blue transition-[top,left,width,height] duration-100 ease-out"
+            style={{
+              top: selRect.top,
+              left: selRect.left,
+              width: selRect.width,
+              height: selRect.height,
+            }}
+          >
+            {/* Fill handle rides the overlay's bottom-right corner. */}
+            <span
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (sel) {
+                  fillingRef.current = true;
+                  setFillEnd({ r: sel.r1, c: sel.c1 });
+                }
+              }}
+              title="Drag to fill"
+              className="pointer-events-auto absolute -bottom-[3px] -right-[3px] h-2 w-2 cursor-crosshair rounded-[1px] bg-accent-blue"
+            />
+          </div>
+        )}
+        </div>
       </div>
 
       {/* Right-click column menu */}
