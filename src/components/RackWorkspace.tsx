@@ -121,7 +121,15 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   }
   function removeField(fieldId: string, name: string) {
     if (confirm(`Delete field “${name}”? Its values on every slot will be removed.`))
-      deleteField.mutate({ id: fieldId });
+      deleteField.mutate(
+        { id: fieldId },
+        {
+          onError: (e) => {
+            setToast(e.message);
+            setTimeout(() => setToast(null), 3500);
+          },
+        },
+      );
   }
   const selectCell = useCallback((cell: Cell) => {
     setSelected(cell);
