@@ -8,6 +8,9 @@ editable spreadsheet.
 ## Features
 
 - **Magic-link auth** (NextAuth + Resend) — no passwords.
+- **Full-width workspace** with a **collapsible left sidebar** to jump
+  project→project and rack→rack (the current project auto-expands); the app fills
+  the viewport rather than a narrow centered column. Typeset in **Geist**.
 - **Projects → racks** with spreadsheet-style coordinates (lettered columns,
   numbered rows: `A3`, `C6`).
 - **Two synced views** of a rack:

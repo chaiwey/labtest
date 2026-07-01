@@ -1,13 +1,12 @@
 import { requireSession } from "@/server/session";
-import { AppHeader } from "@/components/AppHeader";
+import { AppShell } from "@/components/AppShell";
 import { SettingsClient } from "@/components/SettingsClient";
 
 export default async function SettingsPage() {
   const session = await requireSession();
   return (
-    <>
-      <AppHeader email={session.user.email} />
+    <AppShell email={session.user.email}>
       <SettingsClient />
-    </>
+    </AppShell>
   );
 }

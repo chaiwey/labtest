@@ -277,9 +277,9 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
   }
 
   if (rack.isLoading)
-    return <p className="mx-auto max-w-6xl px-6 py-10 text-slate-400">Loading…</p>;
+    return <p className="px-6 py-8 text-slate-400 lg:px-10">Loading…</p>;
   if (!rack.data)
-    return <p className="mx-auto max-w-6xl px-6 py-10 text-slate-500">Rack not found.</p>;
+    return <p className="px-6 py-8 text-slate-500 lg:px-10">Rack not found.</p>;
 
   // Export the primary (first) field — the "Label" — as each slot's label.
   const labelFieldId = fieldDefs[0]?.id;
@@ -302,7 +302,7 @@ export function RackWorkspace({ rackId }: { rackId: string }) {
     : null;
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="px-6 py-8 lg:px-10">
       <Link
         href={`/projects/${rack.data.project.id}`}
         className="text-sm text-slate-400 hover:text-slate-600"

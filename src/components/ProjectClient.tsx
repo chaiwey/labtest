@@ -23,16 +23,14 @@ export function ProjectClient({ projectId }: { projectId: string }) {
   });
 
   if (project.isLoading)
-    return <p className="mx-auto max-w-6xl px-6 py-10 text-slate-400">Loading…</p>;
+    return <p className="px-6 py-8 text-slate-400 lg:px-10">Loading…</p>;
   if (!project.data)
     return (
-      <p className="mx-auto max-w-6xl px-6 py-10 text-slate-500">
-        Project not found.
-      </p>
+      <p className="px-6 py-8 text-slate-500 lg:px-10">Project not found.</p>
     );
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="px-6 py-8 lg:px-10">
       <Link href="/dashboard" className="text-sm text-slate-400 hover:text-slate-600">
         ← All projects
       </Link>
@@ -69,7 +67,7 @@ export function ProjectClient({ projectId }: { projectId: string }) {
         </button>
       </form>
 
-      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
         {project.data.racks.map((r) => (
           <div
             key={r.id}

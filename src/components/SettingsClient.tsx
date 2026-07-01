@@ -43,7 +43,7 @@ export function SettingsClient() {
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
+    <main className="max-w-3xl px-6 py-8 lg:px-10">
       <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
 
       {/* Account */}

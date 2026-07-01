@@ -20,7 +20,7 @@ export function DashboardClient() {
   });
 
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
+    <main className="px-6 py-8 lg:px-10">
       <div className="flex items-end justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Projects</h1>
@@ -56,7 +56,7 @@ export function DashboardClient() {
         {projects.isLoading ? (
           <p className="text-slate-400">Loading…</p>
         ) : projects.data && projects.data.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {projects.data.map((p, i) => (
               <div
                 key={p.id}

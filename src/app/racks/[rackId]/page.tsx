@@ -1,5 +1,5 @@
 import { requireSession } from "@/server/session";
-import { AppHeader } from "@/components/AppHeader";
+import { AppShell } from "@/components/AppShell";
 import { RackWorkspace } from "@/components/RackWorkspace";
 
 export default async function RackPage({
@@ -10,9 +10,8 @@ export default async function RackPage({
   const session = await requireSession();
   const { rackId } = await params;
   return (
-    <>
-      <AppHeader email={session.user.email} />
+    <AppShell email={session.user.email}>
       <RackWorkspace rackId={rackId} />
-    </>
+    </AppShell>
   );
 }

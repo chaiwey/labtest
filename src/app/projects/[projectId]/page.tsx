@@ -1,5 +1,5 @@
 import { requireSession } from "@/server/session";
-import { AppHeader } from "@/components/AppHeader";
+import { AppShell } from "@/components/AppShell";
 import { ProjectClient } from "@/components/ProjectClient";
 
 export default async function ProjectPage({
@@ -10,9 +10,8 @@ export default async function ProjectPage({
   const session = await requireSession();
   const { projectId } = await params;
   return (
-    <>
-      <AppHeader email={session.user.email} />
+    <AppShell email={session.user.email}>
       <ProjectClient projectId={projectId} />
-    </>
+    </AppShell>
   );
 }
